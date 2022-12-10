@@ -48,7 +48,7 @@ func main() {
 	sum := 0
 	available := 70_000_000 - fs["/"]
 	needed := 30_000_000 - available
-	min_needed := math.MaxInt32
+	min_needed := math.MaxInt
 	for _, size := range fs {
 		if size <= 100_000 {
 			sum += size
