@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 func GetLines() chan string {
@@ -26,4 +27,13 @@ func GetLines() chan string {
 		}
 	}()
 	return ch
+}
+
+func ParseInt(s string) int {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	return i
 }
