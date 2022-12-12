@@ -9,43 +9,31 @@ import (
 )
 
 type monkey struct {
-	items       []int
-	operator    string
-	operand2    string
-	inspections int
+	items []int
+
+	operator string
+	operand2 int
+	useOld   bool
+
 	divisor     int
 	trueMonkey  int
 	falseMonkey int
-}
 
-func newMonkey() *monkey {
-	return &monkey{
-		items:       []int{},
-		operator:    "",
-		operand2:    "",
-		inspections: 0,
-		divisor:     -1,
-		trueMonkey:  -1,
-		falseMonkey: -1,
-	}
+	inspections int
 }
 
 func (m *monkey) inspect(old int) int {
-	var addOrMultiply func(int, int) int
-	if m.operator == "+" {
-		addOrMultiply = func(a, b int) int {
-			return a + b
-		}
-	} else if m.operator == "*" {
-		addOrMultiply = func(a, b int) int {
-			return a * b
-		}
+	o2 := m.operand2
+	if m.useOld {
+		o2 = old
 	}
-
-	if m.operand2 == "old" {
-		return addOrMultiply(old, old)
-	} else {
-		return addOrMultiply(old, advent.ParseInt(m.operand2))
+	switch m.operator {
+	case "+":
+		return old + o2
+	case "*":
+		return old * o2
+	default:
+		return old
 	}
 }
 
@@ -59,12 +47,12 @@ func (m *monkey) throw(otherMonkey *monkey, item int) {
 }
 
 func monkeyBusiness(rounds int, ridiculous bool) {
-	m := newMonkey()
+	m := &monkey{}
 	monkeys := []*monkey{m}
 	for l := range advent.GetLines() {
 		f := strings.Fields(l)
 		if len(f) == 0 {
-			m = newMonkey()
+			m = &monkey{}
 			monkeys = append(monkeys, m)
 			continue
 		}
@@ -75,7 +63,13 @@ func monkeyBusiness(rounds int, ridiculous bool) {
 				m.items = append(m.items, advent.ParseInt(strings.Trim(item, ",")))
 			}
 		case "Operation:":
-			m.operator, m.operand2 = f[4], f[5]
+			m.operator = f[4]
+			operand2 := f[5]
+			if operand2 == "old" {
+				m.useOld = true
+			} else {
+				m.operand2 = advent.ParseInt(operand2)
+			}
 		case "Test:":
 			m.divisor = advent.ParseInt(f[3])
 		case "If":
