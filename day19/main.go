@@ -18,30 +18,32 @@ type blueprint struct {
 
 type resources [4]int // ore, clay, obsidian, geode
 
-func (b blueprint) canBuild(robot int, ores resources) (bool, resources) {
-	ore, clay, obsidian := ores[0], ores[1], ores[2]
-	if robot == 0 {
-		if ore >= b.ore {
-			return true, resources{b.ore, 0, 0, 0}
-		}
-	} else if robot == 1 {
-		if ore >= b.clay {
-			return true, resources{b.clay, 0, 0, 0}
-		}
-	} else if robot == 2 {
-		if ore >= b.obsidian.ore && clay >= b.obsidian.clay {
-			return true, resources{ore - b.obsidian.ore, clay - b.obsidian.clay, 0, 0}
-		}
-	} else if robot == 3 {
-		if ore >= b.geode.ore && obsidian >= b.geode.obsidian {
-			return true, resources{ore - b.geode.ore, 0, obsidian - b.geode.obsidian, 0}
-		}
+func (b blueprint) getCost(robotType int) resources {
+	costs := []resources{
+		{b.ore, 0, 0, 0},
+		{b.clay, 0, 0, 0},
+		{b.obsidian.ore, b.obsidian.clay, 0, 0},
+		{b.geode.ore, 0, b.geode.obsidian, 0},
 	}
-	return false, resources{0, 0, 0, 0}
+	return costs[robotType]
 }
 
-func (r *resources) subtract(cost resources) {
-	for i, c := range cost {
+// func (b blueprint) need(robotType int, robots resources) bool {
+// 	if robotType == 0 {
+// 		if robots[0] >= b.ore {
+// 			return false
+// 		}
+// 	} else if robotType == 1 {
+// 		if robots[1] >= b.clay {
+// 			return false
+// 		}
+// 	} else if robotType == 2 {
+// 	}
+// 	return false
+// }
+
+func (r *resources) subtract(r2 resources) {
+	for i, c := range r2 {
 		r[i] -= c
 	}
 }
@@ -78,34 +80,35 @@ func solve(blueprint blueprint, robots resources, ores resources, time int) int 
 		return g
 	}
 
-	if time == 0 {
+	if time <= 0 {
 		return ores[3] // return the geodes
 	}
 
 	maxGeodes := 0
-	nextOres := resources{}
-	for i, r := range robots {
-		nextOres[i] = ores[i] + r
-	}
 
-	// try building a robot
-	for i := range robots {
-		if ok, cost := blueprint.canBuild(i, ores); ok {
-			nextRobots := robots
-			nextRobots[i]++
-			nextOresMinusCost := nextOres
-			nextOresMinusCost.subtract(cost)
-			geodes := solve(blueprint, nextRobots, nextOresMinusCost, time-1)
-			if geodes > maxGeodes {
-				maxGeodes = geodes
+	for robotType := range robots {
+		cost := blueprint.getCost(robotType)
+		cost.subtract(ores)
+		timeNeeded := 1
+		for _, c := range cost {
+			if c > timeNeeded {
+				timeNeeded = c
 			}
 		}
-	}
 
-	// don't build any robots
-	geodes := solve(blueprint, robots, nextOres, time-1)
-	if geodes > maxGeodes {
-		maxGeodes = geodes
+		nextOres := ores
+		for i, robotCount := range robots {
+			nextOres[i] += robotCount * timeNeeded
+		}
+		nextOres[robotType] -= cost[robotType]
+
+		nextRobots := robots
+		nextRobots[robotType]++
+
+		geodes := solve(blueprint, nextRobots, nextOres, time-timeNeeded)
+		if geodes > maxGeodes {
+			maxGeodes = geodes
+		}
 	}
 
 	cache[key] = maxGeodes
