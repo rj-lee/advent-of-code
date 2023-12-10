@@ -8,165 +8,123 @@ import (
 )
 
 type coord struct{ x, y int }
-type rock []coord
-type chamber map[coord]bool
+type chamber map[coord]rune
+type rock struct {
+	coords []coord
+	height int
+}
 type key struct {
-	gas       int
-	shape     int
-	signature [100]coord // Use an arbitrary size so that it is hashable
+	heights [7]int
+	shape   int
+	gas     int
 }
 type state struct {
-	shape     int
-	maxHeight int
-}
-type cache map[key]state
-
-var shapes = []rock{
-	{{2, 0}, {3, 0}, {4, 0}, {5, 0}},
-	{{3, 0}, {2, 1}, {3, 1}, {4, 1}, {3, 2}},
-	{{2, 0}, {3, 0}, {4, 0}, {4, 1}, {4, 2}},
-	{{2, 0}, {2, 1}, {2, 2}, {2, 3}},
-	{{2, 0}, {3, 0}, {2, 1}, {3, 1}},
+	height  int
+	stopped bool
 }
 
-func newRock(shape int, y int) *rock {
-	r := rock{}
-	for _, c := range shapes[shape] {
-		r = append(r, coord{c.x, c.y + y})
+var shapes = [][]coord{
+	[]coord{{2, 0}, {3, 0}, {4, 0}, {5, 0}},
+	[]coord{{3, 0}, {2, 1}, {3, 1}, {4, 1}, {3, 2}},
+	[]coord{{2, 0}, {3, 0}, {4, 0}, {4, 1}, {4, 2}},
+	[]coord{{2, 0}, {2, 1}, {2, 2}, {2, 3}},
+	[]coord{{2, 0}, {3, 0}, {2, 1}, {3, 1}},
+}
+var moves = []string{}
+
+func newRock(coords []coord) *rock {
+	r := &rock{coords: coords}
+	r.height = r.coords[0].y
+	return r
+}
+
+func (r *rock) spawn(chamber *chamber) {
+	for _, c := range r.coords {
+		(*chamber)[c] = '@'
 	}
-	return &r
 }
 
-func (r *rock) moveLeft() {
-	for _, c := range *r {
-		if c.x == 0 {
-			return
+func (r *rock) move(chamber *chamber, dx, dy int) bool {
+	for _, c := range r.coords {
+		newCoord := coord{c.x + dx, c.y + dy}
+		occupied := (*chamber)[newCoord] == '#'
+		outOfBounds := newCoord.y <= 0 || newCoord.x < 0 || newCoord.x > 6
+		if occupied || outOfBounds {
+			return false
 		}
 	}
-	for i := range *r {
-		(*r)[i].x -= 1
+
+	for i, c := range r.coords {
+		delete(*chamber, c)
+		newCoord := coord{c.x + dx, c.y + dy}
+		(*chamber)[newCoord] = '@'
+		r.coords[i] = newCoord
+	}
+	return true
+}
+
+func (r *rock) rest(chamber *chamber) {
+	for _, c := range r.coords {
+		(*chamber)[c] = '#'
 	}
 }
 
-func (r *rock) moveRight() {
-	for _, c := range *r {
-		if c.x == 6 {
-			return
-		}
-	}
-	for i := range *r {
-		(*r)[i].x += 1
-	}
-}
-
-func (r *rock) moveVertical(dy int) {
-	for i := range *r {
-		(*r)[i].y += dy
-	}
-}
-
-func (r *rock) intersects(c chamber) bool {
-	for _, rc := range *r {
-		if c[rc] {
-			return true
-		}
-	}
-	return false
-}
-
-func (c *chamber) add(r rock) {
-	for _, rc := range r {
-		(*c)[rc] = true
-	}
-}
-
-func (c *chamber) signature() [100]coord {
-	maxY := 0
-	for cc := range *c {
-		if cc.y > maxY {
-			maxY = cc.y
-		}
-	}
-	sig := [100]coord{}
-	for cc := range *c {
-		if maxY-cc.y < 30 { // Use an arbitrary number that is large enough
-			sig[len(sig)-1] = coord{cc.x, maxY - cc.y}
-		}
-	}
-	return sig
-}
-
-func (c *chamber) print() {
-	maxY := 0
-	for cc := range *c {
-		if cc.y > maxY {
-			maxY = cc.y
-		}
-	}
-	for y := maxY; y > 0; y-- {
+func (c *chamber) print(maxY int) {
+	for i := maxY + 7; i >= 0; i-- {
+		fmt.Printf("|")
 		for x := 0; x < 7; x++ {
-			if (*c)[coord{x, y}] {
-				fmt.Print("#")
+			if r, ok := (*c)[coord{x, i}]; ok {
+				fmt.Printf("%c", r)
 			} else {
-				fmt.Print(".")
+				fmt.Printf(".")
 			}
 		}
-		fmt.Println()
+		fmt.Println("|")
 	}
+	fmt.Println("+-------+")
 	fmt.Println()
 }
 
-const rounds = 1000000000000
-
-func main() {
-	input := strings.Split(advent.GetInput(), "")
+func solve(rounds int) {
 	chamber := chamber{}
-	for i := 0; i < 7; i++ {
-		chamber[coord{i, 0}] = true
-	}
-	cache := cache{}
-	t, i, top, cycles := 0, 0, 0, 0
-	for t < rounds {
-		rock := newRock(t%5, top+4)
+	maxY := 0
+
+	cache := map[key]int{}
+	shapeI := 0
+	inputI := 0
+	lenShapes := len(shapes)
+	lenMoves := len(moves)
+
+	for i := 0; i < rounds; i++ {
+		shape := i % lenShapes
+		rock := newRock()
+
+		rock.spawn(&chamber)
 		for {
-			if input[i] == "<" {
-				rock.moveLeft()
-				if rock.intersects(chamber) {
-					rock.moveRight()
-				}
-			} else {
-				rock.moveRight()
-				if rock.intersects(chamber) {
-					rock.moveLeft()
-				}
+			gas := rune(input[inputI%len(input)])
+			inputI++
+			dx := -1
+			if gas == '>' {
+				dx = 1
 			}
-			i = (i + 1) % len(input)
-			rock.moveVertical(-1)
-			if rock.intersects(chamber) {
-				rock.moveVertical(1)
-				chamber.add(*rock)
-				// chamber.print()
-				for _, c := range *rock {
-					if c.y > top {
-						top = c.y
-					}
-				}
-				key := key{i, t % 5, chamber.signature()}
-				if state, ok := cache[key]; ok && t >= 2022 {
-					dy := top - state.maxHeight
-					dt := t - state.shape
-					amount := (rounds - t) / dt
-					cycles += amount * dy
-					t += amount * dt
-				}
-				cache[key] = state{t, top}
+			rock.move(&chamber, dx, 0)
+			fall := rock.move(&chamber, 0, -1)
+			if !fall {
 				break
 			}
 		}
-		t++
-		if t == 2022 {
-			fmt.Println(top)
+		rock.rest(&chamber)
+		for _, c := range rock.coords {
+			if c.y > maxY {
+				maxY = c.y
+			}
 		}
 	}
-	fmt.Println(top + cycles)
+	fmt.Println(maxY)
+}
+
+func main() {
+	input := advent.GetInput()
+	moves = strings.Split(input, "")
+	solve(2022)
 }
